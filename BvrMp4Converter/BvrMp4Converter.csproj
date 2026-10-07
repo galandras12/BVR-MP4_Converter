@@ -15,6 +15,10 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
   <!-- Ha az ffmpeg.exe / ffprobe.exe a projekt mappájába kerül, build/publish során az exe mellé másolódik. -->
   <ItemGroup>
     <None Include="ffmpeg.exe" Condition="Exists('ffmpeg.exe')">
