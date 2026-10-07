@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "UZvma8cNXTo=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\gal.andras\\Downloads\\BVR-MP4_Converter-main\\BvrMp4Converter\\BvrMp4Converter.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\gal.andras\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.31\\microsoft.net.illink.tasks.8.0.31.nupkg.sha512",
+    "C:\\Users\\gal.andras\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.31\\microsoft.netcore.app.runtime.win-x64.8.0.31.nupkg.sha512",
+    "C:\\Users\\gal.andras\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.31\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.31.nupkg.sha512",
+    "C:\\Users\\gal.andras\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.31\\microsoft.aspnetcore.app.runtime.win-x64.8.0.31.nupkg.sha512"
+  ],
+  "logs": []
+}
