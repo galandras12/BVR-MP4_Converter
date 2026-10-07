@@ -23,12 +23,17 @@ public partial class MainWindow : Window
     private bool _loading = true;
     private bool _running;
     private List<FileItem> _runItems = new();
+    private string? _encoderName;
 
     public MainWindow()
     {
+        Loc.SetLanguage(_settings.Language); // a XAML-kötések előtt
         InitializeComponent();
+        Title = $"BVR → MP4 Converter v{AboutWindow.VersionString}";
         FileList.ItemsSource = _items;
         ApplySettingsToUi();
+        UpdateLanguageMenu();
+        UpdateEncoderText();
         _loading = false;
         UpdateEnabledState();
         UpdateCount();
@@ -36,8 +41,43 @@ public partial class MainWindow : Window
         _timer.Tick += (_, _) => RefreshProgress();
         _timer.Start();
         Closing += MainWindow_Closing;
-        Loaded += async (_, _) => await InitFfmpegAsync();
+        Loc.LanguageChanged += OnLanguageChanged;
+        Loaded += async (_, _) =>
+        {
+            _settings.Save(); // a config.ini az első induláskor is létrejön
+            await InitFfmpegAsync();
+        };
     }
+
+    // ---------- Nyelv ----------
+
+    private void Lang_Click(object sender, RoutedEventArgs e)
+    {
+        var lang = (sender as MenuItem)?.Tag as string ?? "hu";
+        Loc.SetLanguage(lang);
+        _settings = ReadSettingsFromUi();
+        _settings.Save();
+    }
+
+    private void OnLanguageChanged()
+    {
+        UpdateLanguageMenu();
+        foreach (var it in _items) it.RefreshLanguage();
+        UpdateEncoderText();
+        UpdateCount();
+        if (!_running && _runItems.Count == 0) TotalText.Text = Loc.T("total_idle");
+    }
+
+    private void UpdateLanguageMenu()
+    {
+        LangEn.IsChecked = Loc.Lang == "en";
+        LangHu.IsChecked = Loc.Lang == "hu";
+    }
+
+    private void UpdateEncoderText() =>
+        EncoderText.Text = !_tools.Available ? Loc.T("enc_missing")
+            : _encoderName == null ? Loc.T("enc_detecting")
+            : Loc.F("enc_label", _encoderName);
 
     // ---------- ffmpeg ellenőrzés ----------
 
@@ -46,24 +86,22 @@ public partial class MainWindow : Window
         if (!_tools.Available)
         {
             ShowMissingFfmpeg();
-            EncoderText.Text = "ffmpeg.exe nem található";
             return;
         }
         await RefreshEncoderLabelAsync();
     }
 
     private void ShowMissingFfmpeg() =>
-        MessageBox.Show(this,
-            "Az ffmpeg.exe nem található.\n\nHelyezd az ffmpeg.exe-t (és lehetőleg az ffprobe.exe-t is) a program mellé:\n" +
-            FfmpegTools.ExpectedLocation + "\n\nEnélkül a konvertálás nem indítható.",
-            "Hiányzó ffmpeg", MessageBoxButton.OK, MessageBoxImage.Warning);
+        MessageBox.Show(this, Loc.F("msg_ffmpeg_missing", FfmpegTools.ExpectedLocation),
+            Loc.T("title_ffmpeg_missing"), MessageBoxButton.OK, MessageBoxImage.Warning);
 
     private async Task RefreshEncoderLabelAsync()
     {
         if (!_tools.Available) return;
-        EncoderText.Text = "kódoló érzékelése…";
-        var enc = await _tools.DetectEncoderAsync(SelectedCodec());
-        EncoderText.Text = "kódoló: " + enc;
+        _encoderName = null;
+        UpdateEncoderText();
+        _encoderName = await _tools.DetectEncoderAsync(SelectedCodec());
+        UpdateEncoderText();
     }
 
     // ---------- Beállítások ----------
@@ -87,6 +125,8 @@ public partial class MainWindow : Window
 
     private AppSettings ReadSettingsFromUi() => new()
     {
+        Language = Loc.Lang,
+        LastInputFolder = _settings.LastInputFolder,
         OutputFolder = OutputBox.Text.Trim(),
         Mode = ReencodeRadio.IsChecked == true ? ConvertMode.Reencode : ConvertMode.Remux,
         Codec = SelectedCodec(),
@@ -161,11 +201,20 @@ public partial class MainWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title = "BVR fájlok kiválasztása",
-            Filter = "Blue Iris BVR (*.bvr)|*.bvr|Minden fájl (*.*)|*.*",
+            Title = Loc.T("dlg_files_title"),
+            Filter = Loc.T("dlg_files_filter"),
             Multiselect = true
         };
-        if (dlg.ShowDialog(this) == true) AddPaths(dlg.FileNames);
+        if (Directory.Exists(_settings.LastInputFolder)) dlg.InitialDirectory = _settings.LastInputFolder;
+        if (dlg.ShowDialog(this) != true) return;
+
+        AddPaths(dlg.FileNames);
+        var folder = Path.GetDirectoryName(dlg.FileNames[0]);
+        if (!string.IsNullOrEmpty(folder))
+        {
+            _settings.LastInputFolder = folder;
+            _settings.Save();
+        }
     }
 
     private void AddPaths(IEnumerable<string> paths)
@@ -216,7 +265,8 @@ public partial class MainWindow : Window
         _paths.Clear();
         UpdateCount();
         TotalBar.Value = 0;
-        TotalText.Text = "—";
+        TotalText.Text = Loc.T("total_idle");
+        _runItems = new();
     }
 
     private void FileList_KeyDown(object sender, KeyEventArgs e)
@@ -227,7 +277,7 @@ public partial class MainWindow : Window
     private void UpdateCount()
     {
         long total = _items.Sum(i => i.SizeBytes);
-        CountText.Text = _items.Count == 0 ? "" : $"{_items.Count} fájl, {FileItem.FormatSize(total)}";
+        CountText.Text = _items.Count == 0 ? "" : Loc.F("count_text", _items.Count, FileItem.FormatSize(total));
     }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshDetails();
@@ -238,11 +288,14 @@ public partial class MainWindow : Window
         if (DetailsBox.Text != text) DetailsBox.Text = text;
     }
 
+    private void About_Click(object sender, RoutedEventArgs e) =>
+        new AboutWindow { Owner = this }.ShowDialog();
+
     // ---------- Kimeneti mappa ----------
 
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Kimeneti mappa kiválasztása" };
+        var dlg = new OpenFolderDialog { Title = Loc.T("dlg_folder_title") };
         if (Directory.Exists(OutputBox.Text)) dlg.InitialDirectory = OutputBox.Text;
         if (dlg.ShowDialog(this) == true) OutputBox.Text = dlg.FolderName;
     }
@@ -257,7 +310,7 @@ public partial class MainWindow : Window
 
         if (!Directory.Exists(dir))
         {
-            MessageBox.Show(this, "A kimeneti mappa még nem létezik.", "Mappa megnyitása", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, Loc.T("msg_folder_missing"), Loc.T("title_open_folder"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
@@ -272,7 +325,7 @@ public partial class MainWindow : Window
         var todo = _items.Where(i => i.Status != ItemStatus.Done).ToList();
         if (todo.Count == 0)
         {
-            MessageBox.Show(this, "Nincs konvertálandó fájl a listában.", "BVR → MP4", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, Loc.T("msg_no_files"), "BVR → MP4", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -284,16 +337,15 @@ public partial class MainWindow : Window
             try { Directory.CreateDirectory(_settings.OutputFolder); }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "A kimeneti mappa nem hozható létre:\n" + ex.Message, "Hiba", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(this, Loc.F("msg_outdir_fail", ex.Message), Loc.T("title_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
         }
 
         if (_settings.DeleteSource)
         {
-            var r = MessageBox.Show(this,
-                "Be van kapcsolva az eredeti .bvr fájlok törlése sikeres konvertálás után.\nBiztosan folytatod?",
-                "Megerősítés", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var r = MessageBox.Show(this, Loc.T("msg_confirm_delete"),
+                Loc.T("title_confirm"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (r != MessageBoxResult.Yes) return;
         }
 
@@ -333,8 +385,8 @@ public partial class MainWindow : Window
             int skip = todo.Count(i => i.Status == ItemStatus.Skipped);
             log.Write($"Vége: kész={ok}, hiba={err}, kihagyva={skip}, megszakítva={cancelled}, idő={_clock.Elapsed:hh\\:mm\\:ss}");
             TotalBar.Value = todo.Sum(i => Math.Max(1, i.SizeBytes) * i.Fraction) / todo.Sum(i => (double)Math.Max(1, i.SizeBytes)) * 100;
-            TotalText.Text = $"{(cancelled ? "Megszakítva" : "Kész")}: {ok} ok, {err} hiba, {skip} kihagyva";
-            if (log.Path != null) TotalText.ToolTip = "Napló: " + log.Path;
+            TotalText.Text = Loc.F("total_done", Loc.T(cancelled ? "word_cancelled" : "word_done"), ok, err, skip);
+            if (log.Path != null) TotalText.ToolTip = Loc.F("tip_log", log.Path);
         }
     }
 
@@ -347,10 +399,8 @@ public partial class MainWindow : Window
     private Task<ConflictAnswer> AskConflictAsync(string path) =>
         Dispatcher.InvokeAsync(() =>
         {
-            var r = MessageBox.Show(this,
-                $"A kimeneti fájl már létezik:\n{path}\n\n" +
-                "Igen = felülír\nNem = átnevez (új sorszámmal)\nMégse = kihagy",
-                "Létező kimeneti fájl", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            var r = MessageBox.Show(this, Loc.F("msg_conflict", path),
+                Loc.T("title_conflict"), MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             return r switch
             {
                 MessageBoxResult.Yes => ConflictAnswer.Overwrite,
@@ -372,21 +422,21 @@ public partial class MainWindow : Window
         double p = totalSize > 0 ? done / totalSize : 0;
         TotalBar.Value = p * 100;
 
-        string eta = "becslés…";
+        string eta = Loc.T("eta_estimating");
         if (p > 0.02 && _clock.IsRunning)
         {
             var remaining = TimeSpan.FromSeconds(_clock.Elapsed.TotalSeconds * (1 - p) / p);
             eta = remaining.ToString(remaining.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss");
         }
         int finished = active.Count(i => i.Status is ItemStatus.Done or ItemStatus.Error or ItemStatus.Skipped);
-        TotalText.Text = $"{p * 100:0}%  ({finished}/{active.Count})  hátralévő: {eta}";
+        TotalText.Text = Loc.F("total_progress", p * 100, finished, active.Count, eta);
     }
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_running)
         {
-            var r = MessageBox.Show(this, "Konvertálás van folyamatban. Biztosan kilépsz?", "Kilépés",
+            var r = MessageBox.Show(this, Loc.T("msg_exit_running"), Loc.T("title_exit"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (r != MessageBoxResult.Yes) { e.Cancel = true; return; }
             _cts?.Cancel();

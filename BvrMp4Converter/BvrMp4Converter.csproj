@@ -8,6 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>BvrMp4Converter</AssemblyName>
     <RootNamespace>BvrMp4Converter</RootNamespace>
+    <Version>1.0.2</Version>
+    <Product>BVR → MP4 Converter</Product>
+    <Authors>Galandras12</Authors>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- a verzió ne kapjon "+commit" utótagot -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>

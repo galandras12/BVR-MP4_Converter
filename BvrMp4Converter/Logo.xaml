@@ -1,0 +1,81 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Logó: kék szem piros filmszalagon (256x256) -->
+    <DrawingImage x:Key="AppLogo">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <!-- átlátszó keret, hogy a méret fix 256x256 legyen -->
+                <GeometryDrawing Brush="Transparent">
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="0,0,256,256"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- piros filmszalag -->
+                <GeometryDrawing Brush="#FFD32F2F">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF8E1B1B" Thickness="4"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="4,84,248,88" RadiusX="8" RadiusY="8"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- perforációs lyukak (fent és lent) -->
+                <GeometryDrawing Brush="#FFFFF3F0">
+                    <GeometryDrawing.Geometry>
+                        <GeometryGroup>
+                            <RectangleGeometry Rect="14,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="42,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="70,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="172,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="200,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="228,92,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="14,152,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="42,152,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="70,152,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="172,152,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="200,152,14,12" RadiusX="3" RadiusY="3"/>
+                            <RectangleGeometry Rect="228,152,14,12" RadiusX="3" RadiusY="3"/>
+                        </GeometryGroup>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- szem: fehér mandula alak kék kontúrral -->
+                <GeometryDrawing Brush="White">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF1565C0" Thickness="9" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M 18,128 Q 128,0 238,128 Q 128,256 18,128 Z"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- írisz -->
+                <GeometryDrawing Brush="#FF1E88E5">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF0D47A1" Thickness="5"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="128,128" RadiusX="46" RadiusY="46"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- pupilla -->
+                <GeometryDrawing Brush="#FF0B1F3A">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="128,128" RadiusX="21" RadiusY="21"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- fényfolt -->
+                <GeometryDrawing Brush="White">
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="114,113" RadiusX="9" RadiusY="9"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+</ResourceDictionary>
