@@ -10,7 +10,10 @@ Teljesen offline, nincs hálózati hívás és telemetria; a konvertálást az e
 | `BvrMp4Converter/BvrMp4Converter.csproj` | projekt, single-file publish beállítások |
 | `BvrMp4Converter/App.xaml(.cs)` | alkalmazás belépési pont |
 | `BvrMp4Converter/MainWindow.xaml(.cs)` | felület, drag & drop, vezérlés, összesített haladás/ETA |
-| `BvrMp4Converter/Models/AppSettings.cs` | beállítások mentése (`%APPDATA%\BvrMp4Converter\settings.json`) |
+| `BvrMp4Converter/Models/AppSettings.cs` | beállítások mentése/olvasása a `config.ini`-ből (az exe mellett; ha ott nem írható: `%APPDATA%\BvrMp4Converter\config.ini`) |
+| `BvrMp4Converter/Loc.cs` | magyar / angol felületszövegek, nyelvváltás (Nyelvek menü) |
+| `BvrMp4Converter/AboutWindow.xaml(.cs)` | Névjegy ablak |
+| `BvrMp4Converter/Logo.xaml`, `Assets/app.ico` | logó (kék szem, piros filmszalag) és exe-ikon |
 | `BvrMp4Converter/Models/FileItem.cs` | egy listaelem (név, méret, állapot, haladás) |
 | `BvrMp4Converter/Services/FfmpegTools.cs` | ffmpeg/ffprobe keresés, ffprobe, GPU-kódoló érzékelés |
 | `BvrMp4Converter/Services/ConversionEngine.cs` | remux / újrakódolás, fallback, ellenőrzés, dátumátvitel, névütközés |

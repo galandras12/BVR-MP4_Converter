@@ -1,0 +1,45 @@
+BVR -> MP4 Converter - Változásnapló
+====================================
+
+1.0.2 (2026-10-07)
+------------------
+Új:
+  - Kétnyelvű felület (magyar / angol): új "Nyelvek" menü a "Névjegy" előtt,
+    a váltás azonnal érvényesül (menük, feliratok, üzenetek, fájlállapotok,
+    Névjegy ablak). Első induláskor a rendszer nyelve dönt (magyar vagy angol).
+  - config.ini: a program az utoljára használt beállításokat az exe melletti
+    config.ini fájlba menti, és induláskor onnan olvassa vissza: nyelv,
+    kimeneti mappa (pl. Asztal), utolsó tallózott mappa, mód, kodek (H.264 /
+    H.265), minőség, felbontás-felezés, 180° forgatás, törlés opció,
+    párhuzamosság, létező fájl kezelése. Ha az exe mappája nem írható,
+    a fájl a %APPDATA%\BvrMp4Converter mappába kerül.
+  - Tallózásnál a fájlválasztó az utoljára használt mappában nyílik meg.
+Változott:
+  - A korábbi settings.json helyett config.ini (szerkeszthető szövegfájl).
+
+1.0.1 (2026-10-07)
+------------------
+Új:
+  - Logó: kék szem piros filmszalagon (ablak- és exe ikon, Névjegy ablak).
+  - Névjegy menü a főablak tetején: fejlesztő, kódért felelős szoftver,
+    nyílt forráskód, licenc (GPL v3.0), kötelező kiegészítők (ffmpeg, ffprobe),
+    verziószám és az új verziók (kiadások) oldalának linkje.
+  - A verziószám megjelenik az ablak címsorában is.
+Javítva:
+  - Fordítási hiba WPF alatt: hiányzó System.IO implicit using a projektfájlban.
+
+1.0.0 (2026-10-07)
+------------------
+  - Első kiadás: Windows asztali alkalmazás (C# / .NET 8 / WPF), offline működés.
+  - Blue Iris .bvr fájlok konvertálása .mp4-be az exe mellé tett ffmpeg.exe-vel.
+  - Drag & drop (fájlok, mappák rekurzívan) és tallózás, fájllista egyedi
+    haladásjelzővel, összesített progress bar és hátralévő idő becslés.
+  - Módok: gyors 1:1 remux (alapértelmezett, nem MP4-kompatibilis hang esetén
+    csak a hang AAC-re) és újrakódolás hardveresen (NVENC / QSV / AMF,
+    tartalék libx264), minőség csúszka, felbontás-felezés, 180°-os forgatás.
+  - Hiba esetén automatikus újrapróbálás újrakódolással.
+  - Kimenet ellenőrzése (hossz összevetése a bemenettel), létrehozási és
+    módosítási dátum átvitele, naplófájl a kimeneti mappába.
+  - Névütközés kezelése (kérdez / felülír / kihagy / átnevez).
+  - Beállítható párhuzamos feldolgozás (1-4 fájl), megjegyzett beállítások.
+  - Az eredeti .bvr fájl nem módosul; a törlés opció alapból ki van kapcsolva.
