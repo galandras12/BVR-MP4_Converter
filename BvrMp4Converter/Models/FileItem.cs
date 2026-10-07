@@ -28,14 +28,17 @@ public sealed class FileItem : INotifyPropertyChanged
 
     public string StatusText => Status switch
     {
-        ItemStatus.Waiting => "várakozik",
-        ItemStatus.Running => "folyamatban",
-        ItemStatus.Done => "kész",
-        ItemStatus.Error => "hiba",
-        ItemStatus.Skipped => "kihagyva",
-        ItemStatus.Cancelled => "megszakítva",
+        ItemStatus.Waiting => Loc.T("st_waiting"),
+        ItemStatus.Running => Loc.T("st_running"),
+        ItemStatus.Done => Loc.T("st_done"),
+        ItemStatus.Error => Loc.T("st_error"),
+        ItemStatus.Skipped => Loc.T("st_skipped"),
+        ItemStatus.Cancelled => Loc.T("st_cancelled"),
         _ => ""
     };
+
+    /// <summary>Nyelvváltás után az állapotszöveg újraolvasása.</summary>
+    public void RefreshLanguage() => OnChanged(nameof(StatusText));
 
     private double _progress;
     /// <summary>0–100</summary>
