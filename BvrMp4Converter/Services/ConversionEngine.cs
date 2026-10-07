@@ -52,7 +52,7 @@ public sealed class ConversionEngine
             if (outPath == null)
             {
                 item.Status = ItemStatus.Skipped;
-                item.Note = "a kimeneti fájl már létezik";
+                item.Note = Loc.T("note_exists");
                 _log.Write("Kihagyva: a kimenet már létezik.");
                 return;
             }
@@ -71,13 +71,13 @@ public sealed class ConversionEngine
                 item.Note = "remux";
                 var args = BuildRemuxArgs(item.Path, tmp, probe);
                 var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct);
-                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : $"ffmpeg kilépési kód: {run.Exit}";
+                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
                 ok = error == "";
                 if (!ok)
                 {
                     _log.Write($"Remux sikertelen: {error}\n{run.Tail}");
                     item.Details = run.Tail;
-                    item.Note = "remux hiba → újrakódolás";
+                    item.Note = Loc.T("note_remux_fail");
                     SafeDelete(tmp);
                     item.Progress = 0;
                 }
@@ -87,11 +87,11 @@ public sealed class ConversionEngine
             {
                 string codec = _opt.Codec == "hevc" ? "hevc" : "h264";
                 string encoder = await _tools.DetectEncoderAsync(codec);
-                var prefix = _opt.Mode == ConvertMode.Remux && !_opt.Rotate180 ? "remux hiba → " : "";
-                item.Note = $"{prefix}újrakódolás ({encoder})";
+                bool afterRemux = _opt.Mode == ConvertMode.Remux && !_opt.Rotate180;
+                item.Note = Loc.F(afterRemux ? "note_reenc_after_remux" : "note_reenc", encoder);
                 var args = BuildEncodeArgs(item.Path, tmp, encoder);
                 var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct);
-                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : $"ffmpeg kilépési kód: {run.Exit}";
+                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
                 ok = error == "";
                 if (!ok)
                 {
@@ -106,7 +106,7 @@ public sealed class ConversionEngine
             {
                 SafeDelete(tmp);
                 item.Status = ItemStatus.Error;
-                item.Note = "hiba: " + error;
+                item.Note = Loc.F("note_error", error);
                 return;
             }
 
@@ -134,7 +134,7 @@ public sealed class ConversionEngine
         {
             SafeDelete((item.OutputPath ?? "") + ".part");
             item.Status = ItemStatus.Cancelled;
-            item.Note = "megszakítva";
+            item.Note = Loc.T("st_cancelled");
             item.Indeterminate = false;
             _log.Write("Megszakítva.");
             throw;
@@ -142,7 +142,7 @@ public sealed class ConversionEngine
         catch (Exception ex)
         {
             item.Status = ItemStatus.Error;
-            item.Note = "hiba: " + ex.Message;
+            item.Note = Loc.F("note_error", ex.Message);
             item.Details = ex.ToString();
             item.Indeterminate = false;
             _log.Write("Kivétel: " + ex);
@@ -311,23 +311,23 @@ public sealed class ConversionEngine
         try
         {
             var fi = new FileInfo(output);
-            if (!fi.Exists || fi.Length == 0) return "a kimeneti fájl üres vagy hiányzik";
+            if (!fi.Exists || fi.Length == 0) return Loc.T("err_empty");
 
             var po = await _tools.ProbeAsync(output, ct);
-            if (!po.HasVideo) return "a kimeneten nincs videó stream";
-            if (po.DurationSec <= 0) return "a kimenet hossza nem olvasható";
+            if (!po.HasVideo) return Loc.T("err_no_video");
+            if (po.DurationSec <= 0) return Loc.T("err_no_duration");
 
             if (input.DurationSec > 0)
             {
                 double diff = Math.Abs(po.DurationSec - input.DurationSec);
                 double tol = Math.Max(1.5, input.DurationSec * 0.02);
                 if (diff > tol)
-                    return $"a hossz eltér (be: {input.DurationSec:0.0}s, ki: {po.DurationSec:0.0}s)";
+                    return Loc.F("err_duration_diff", input.DurationSec, po.DurationSec);
             }
             return "";
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { return "ellenőrzési hiba: " + ex.Message; }
+        catch (Exception ex) { return Loc.F("err_validate", ex.Message); }
     }
 
     private static void SafeDelete(string path)
