@@ -60,7 +60,7 @@ namespace BvrMp4Converter {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/BvrMp4Converter;V1.0.2.0;component/aboutwindow.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/BvrMp4Converter;V1.0.3.1344;component/aboutwindow.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\AboutWindow.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);
