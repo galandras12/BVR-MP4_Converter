@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>BvrMp4Converter</AssemblyName>
     <RootNamespace>BvrMp4Converter</RootNamespace>
-    <Version>1.0.2</Version>
+    <Version>1.0.3.1344</Version>
     <Product>BVR → MP4 Converter</Product>
     <Authors>Galandras12</Authors>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
