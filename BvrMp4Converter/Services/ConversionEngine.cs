@@ -59,45 +59,83 @@ public sealed class ConversionEngine
             item.OutputPath = outPath;
             var tmp = outPath + ".part";
 
-            var probe = await _tools.ProbeAsync(item.Path, ct);
-            _log.Write($"Probe: hossz={probe.DurationSec:0.##}s, videó={probe.HasVideo}, hang=[{string.Join(",", probe.AudioCodecs)}]");
-            item.Indeterminate = probe.DurationSec <= 0;
-
             bool ok = false;
             string error = "";
 
-            if (_opt.Mode == ConvertMode.Remux && !_opt.Rotate180)
+            // 1) saját BVR-bontás: a konténer darabjaiból tiszta H.264/H.265 folyam, a fájlból mért valós képsebességgel
+            if (BvrDemuxer.LooksLikeBvr(item.Path))
             {
-                item.Note = "remux";
-                var args = BuildRemuxArgs(item.Path, tmp, probe);
-                var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct);
-                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
-                ok = error == "";
-                if (!ok)
+                // az elemzés a teljes fájlt végigolvassa: lassú lemezen percekig is tarthat, ezért látható a haladása
+                item.Note = Loc.T("note_scanning");
+                item.Indeterminate = false;
+                var scanSw = Stopwatch.StartNew();
+                var info = await BvrDemuxer.ScanAsync(item.Path, pct => item.Progress = pct, ct);
+                item.Progress = 0;
+                _log.Write($"BVR-elemzés ideje: {scanSw.Elapsed.TotalSeconds:0.#} s");
+                if (info == null)
+                    _log.Write("BVR-bontás: nem található videó a konténerben.");
+                else
                 {
-                    _log.Write($"Remux sikertelen: {error}\n{run.Tail}");
-                    item.Details = run.Tail;
-                    item.Note = Loc.T("note_remux_fail");
-                    SafeDelete(tmp);
-                    item.Progress = 0;
+                    _log.Write($"BVR-bontás: kodek={info.Codec}, képkockák={info.FrameCount}, hossz={info.DurationSec:0.#}s, " +
+                               $"fps={info.Fps:0.###}, egyéb darabok={info.OtherChunks}, típusok=[{info.TypeSummary}]");
+                    var bProfile = BvrDemuxer.CreateProfile(info);
+                    var bProbe = new ProbeResult(info.DurationSec, true, Array.Empty<string>(), info.Codec);
+                    var bSuffix = " – " + Loc.F("note_bvr", info.Codec.ToUpperInvariant(), info.Fps.ToString("0.##"));
+                    item.Indeterminate = false;
+                    (ok, error) = await ConvertAsync(item, tmp, bProbe, bProfile, bSuffix, ct);
+                    if (!ok)
+                    {
+                        _log.Write($"A BVR-bontás sikertelen ({error}); ffmpeg közvetlen beolvasás következik.");
+                        SafeDelete(tmp);
+                        item.Progress = 0;
+                    }
                 }
             }
 
+            // 2) ffmpeg közvetlen beolvasás: alapértelmezett, nem megnyíló fájlnál tartalék módok
             if (!ok)
             {
-                string codec = _opt.Codec == "hevc" ? "hevc" : "h264";
-                string encoder = await _tools.DetectEncoderAsync(codec);
-                bool afterRemux = _opt.Mode == ConvertMode.Remux && !_opt.Rotate180;
-                item.Note = Loc.F(afterRemux ? "note_reenc_after_remux" : "note_reenc", encoder);
-                var args = BuildEncodeArgs(item.Path, tmp, encoder);
-                var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct);
-                error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
-                ok = error == "";
-                if (!ok)
+                var profile = InputProfile.Default;
+                var probe = await _tools.ProbeAsync(item.Path, ct);
+                _log.Write($"Probe: hossz={probe.DurationSec:0.##}s, videó={probe.HasVideo}, kodek={probe.VideoCodec}, hang=[{string.Join(",", probe.AudioCodecs)}]");
+
+                string suffix = "";
+                if (!probe.HasVideo)
                 {
-                    item.Details = (run.Tail + Environment.NewLine + error).Trim();
-                    _log.Write($"Újrakódolás sikertelen: {error}\n{run.Tail}");
+                    _log.Write("Nem található videó stream; tartalék beolvasási módok kipróbálása.");
+                    foreach (var p in InputProfiles.Fallbacks(item.Path))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        var pr = await _tools.ProbeAsync(item.Path, ct, p.Args);
+                        _log.Write($"Probe [{p.Name}]: videó={pr.HasVideo}, kodek={pr.VideoCodec}, hossz={pr.DurationSec:0.##}s");
+                        if (!pr.HasVideo) continue;
+                        profile = p;
+                        probe = pr;
+                        break;
+                    }
+
+                    if (!probe.HasVideo)
+                    {
+                        var hex = InputProfiles.HexHeader(item.Path);
+                        _log.Write("Ismeretlen formátum, a fájl eleje:\n" + hex);
+                        item.Details = hex;
+                        item.Indeterminate = false;
+                        item.Status = ItemStatus.Error;
+                        item.Note = Loc.T("err_unrecognized");
+                        return;
+                    }
+
+                    if (profile.RawCodec != null)
+                    {
+                        // nyers adatfolyamnál a hossz nem megbízható, a sebesség pedig feltételezett
+                        probe = probe with { DurationSec = 0 };
+                        suffix = " – " + Loc.F("note_raw", profile.RawCodec.ToUpperInvariant(), InputProfiles.RawFps);
+                    }
+                    else suffix = " – " + Loc.T("note_tolerant");
+                    _log.Write($"Használt beolvasási mód: {profile.Name}: {string.Join(" ", profile.Args)}");
                 }
+                item.Indeterminate = probe.DurationSec <= 0;
+                (ok, error) = await ConvertAsync(item, tmp, probe, profile, suffix, ct);
             }
 
             ct.ThrowIfCancellationRequested();
@@ -147,6 +185,52 @@ public sealed class ConversionEngine
             item.Indeterminate = false;
             _log.Write("Kivétel: " + ex);
         }
+    }
+
+    /// <summary>Egy beolvasási móddal: előbb remux (ha kérték), hiba esetén újrakódolás. Az ideiglenes fájl a tmp.</summary>
+    private async Task<(bool Ok, string Error)> ConvertAsync(
+        FileItem item, string tmp, ProbeResult probe, InputProfile profile, string suffix, CancellationToken ct)
+    {
+        Func<Stream, CancellationToken, Task>? feeder =
+            profile.UsesPipe ? (s, t) => BvrDemuxer.PumpAsync(item.Path, s, t) : null;
+
+        bool ok = false;
+        string error = "";
+
+        if (_opt.Mode == ConvertMode.Remux && !_opt.Rotate180)
+        {
+            item.Note = "remux" + suffix;
+            var args = BuildRemuxArgs(item.Path, tmp, probe, profile);
+            var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct, feeder);
+            error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
+            ok = error == "";
+            if (!ok)
+            {
+                _log.Write($"Remux sikertelen: {error}\n{run.Tail}");
+                item.Details = run.Tail;
+                item.Note = Loc.T("note_remux_fail") + suffix;
+                SafeDelete(tmp);
+                item.Progress = 0;
+            }
+        }
+
+        if (!ok)
+        {
+            string codec = _opt.Codec == "hevc" ? "hevc" : "h264";
+            string encoder = await _tools.DetectEncoderAsync(codec);
+            bool afterRemux = _opt.Mode == ConvertMode.Remux && !_opt.Rotate180;
+            item.Note = Loc.F(afterRemux ? "note_reenc_after_remux" : "note_reenc", encoder) + suffix;
+            var args = BuildEncodeArgs(item.Path, tmp, encoder, profile);
+            var run = await RunFfmpegAsync(item, args, probe.DurationSec, ct, feeder);
+            error = run.Exit == 0 ? await ValidateAsync(tmp, probe, ct) : Loc.F("err_exit", run.Exit);
+            ok = error == "";
+            if (!ok)
+            {
+                item.Details = (run.Tail + Environment.NewLine + error).Trim();
+                _log.Write($"Újrakódolás sikertelen: {error}\n{run.Tail}");
+            }
+        }
+        return (ok, error);
     }
 
     // ---------- Kimeneti név ----------
@@ -200,14 +284,18 @@ public sealed class ConversionEngine
 
     // ---------- ffmpeg paraméterek ----------
 
-    private static List<string> CommonStart(string input) => new()
+    private static List<string> CommonStart(string input, InputProfile profile)
     {
-        "-hide_banner", "-nostdin", "-y", "-loglevel", "warning", "-progress", "pipe:1", "-nostats", "-i", input
-    };
+        var a = new List<string> { "-hide_banner", "-y", "-loglevel", "warning", "-progress", "pipe:1", "-nostats" };
+        if (!profile.UsesPipe) a.Insert(1, "-nostdin"); // csőből olvasásnál az stdin a bemenet
+        a.AddRange(profile.Args);
+        a.AddRange(new[] { "-i", profile.UsesPipe ? "pipe:0" : input });
+        return a;
+    }
 
-    private static List<string> BuildRemuxArgs(string input, string output, ProbeResult probe)
+    private static List<string> BuildRemuxArgs(string input, string output, ProbeResult probe, InputProfile profile)
     {
-        var a = CommonStart(input);
+        var a = CommonStart(input, profile);
         // -map 0 helyett csak videó + hang: az MP4 az adat/felirat stream-eket gyakran nem fogadja el.
         a.AddRange(new[] { "-map", "0:v", "-map", "0:a?" });
         bool audioOk = probe.AudioCodecs.All(c => Mp4Audio.Contains(c));
@@ -215,16 +303,21 @@ public sealed class ConversionEngine
             a.AddRange(new[] { "-c", "copy" });
         else
             a.AddRange(new[] { "-c:v", "copy", "-c:a", "aac", "-b:a", "128k" }); // csak a hangot kódolja
+        // a folyamba beágyazott időzítést (VUI/SEI) felülírjuk a fájlból mért képsebességgel
+        if (profile.UsesPipe) a.AddRange(new[] { "-bsf:v", $"setts=ts=N/({FpsText(profile)}*TB)" });
+        if (probe.VideoCodec == "hevc") a.AddRange(new[] { "-tag:v", "hvc1" }); // H.265 az MP4-ben lejátszókompatibilisen
         a.AddRange(new[] { "-movflags", "+faststart", "-f", "mp4", output });
         return a;
     }
 
-    private List<string> BuildEncodeArgs(string input, string output, string encoder)
+    private List<string> BuildEncodeArgs(string input, string output, string encoder, InputProfile profile)
     {
-        var a = CommonStart(input);
+        var a = CommonStart(input, profile);
         a.AddRange(new[] { "-map", "0:v", "-map", "0:a?" });
 
         var filters = new List<string>();
+        // a folyamba beágyazott időzítést (VUI/SEI) felülírjuk a fájlból mért képsebességgel
+        if (profile.UsesPipe) filters.Add($"setpts=N/({FpsText(profile)}*TB)");
         if (_opt.Rotate180) filters.Add("hflip,vflip");
         if (_opt.HalfResolution) filters.Add("scale=trunc(iw/4)*2:trunc(ih/4)*2");
         if (filters.Count > 0) a.AddRange(new[] { "-vf", string.Join(",", filters) });
@@ -245,15 +338,20 @@ public sealed class ConversionEngine
 
         if (encoder.StartsWith("hevc") || encoder == "libx265") a.AddRange(new[] { "-tag:v", "hvc1" });
 
+        if (profile.UsesPipe) a.AddRange(new[] { "-r", FpsText(profile) });
+
         a.AddRange(new[] { "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-f", "mp4", output });
         return a;
     }
+
+    private static string FpsText(InputProfile profile) => profile.Fps.ToString("0.####", CultureInfo.InvariantCulture);
 
     // ---------- Futtatás ----------
 
     private sealed record RunResult(int Exit, string Tail);
 
-    private async Task<RunResult> RunFfmpegAsync(FileItem item, List<string> args, double durationSec, CancellationToken ct)
+    private async Task<RunResult> RunFfmpegAsync(FileItem item, List<string> args, double durationSec, CancellationToken ct,
+        Func<Stream, CancellationToken, Task>? feeder = null)
     {
         _log.Write("ffmpeg " + string.Join(" ", args.Select(Quote)));
         var tail = new Queue<string>();
@@ -281,7 +379,24 @@ public sealed class ConversionEngine
         };
 
         p.Start();
-        try { p.StandardInput.Close(); } catch { }
+        Task? feed = null;
+        if (feeder != null)
+        {
+            var stdin = p.StandardInput.BaseStream;
+            feed = Task.Run(async () =>
+            {
+                try { await feeder(stdin, ct); }
+                catch (IOException) { /* az ffmpeg idő előtt kilépett: a hibát a kilépési kód jelzi */ }
+                catch (ObjectDisposedException) { }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { _log.Write("Bemeneti adatfolyam hiba: " + ex.Message); }
+                finally { try { stdin.Close(); } catch { } }
+            });
+        }
+        else
+        {
+            try { p.StandardInput.Close(); } catch { }
+        }
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
         try
@@ -292,6 +407,10 @@ public sealed class ConversionEngine
         {
             ProcessUtil.Kill(p);
             throw;
+        }
+        finally
+        {
+            if (feed != null) await feed;
         }
         p.WaitForExit();
 

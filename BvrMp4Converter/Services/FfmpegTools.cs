@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace BvrMp4Converter.Services;
 
-public sealed record ProbeResult(double DurationSec, bool HasVideo, IReadOnlyList<string> AudioCodecs);
+public sealed record ProbeResult(double DurationSec, bool HasVideo, IReadOnlyList<string> AudioCodecs, string VideoCodec = "");
 
 /// <summary>Az exe mellé tett ffmpeg.exe / ffprobe.exe megkeresése, ffprobe és hardveres kódoló érzékelés.</summary>
 public sealed class FfmpegTools
@@ -43,28 +43,31 @@ public sealed class FfmpegTools
 
     // ---------- Probe ----------
 
-    public async Task<ProbeResult> ProbeAsync(string file, CancellationToken ct)
+    /// <param name="inputArgs">Extra bemeneti kapcsolók (a fájlnév elé), pl. -f hevc.</param>
+    public async Task<ProbeResult> ProbeAsync(string file, CancellationToken ct, IReadOnlyList<string>? inputArgs = null)
     {
+        inputArgs ??= Array.Empty<string>();
         if (FfprobePath != null)
         {
             try
             {
-                var r = await ProcessUtil.RunCaptureAsync(FfprobePath, new[]
-                {
-                    "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file
-                }, ct);
+                var args = new List<string> { "-v", "error", "-print_format", "json", "-show_format", "-show_streams" };
+                args.AddRange(inputArgs);
+                args.Add(file);
+                var r = await ProcessUtil.RunCaptureAsync(FfprobePath, args, ct);
                 if (r.ExitCode == 0) return ParseProbeJson(r.Stdout);
             }
             catch (OperationCanceledException) { throw; }
             catch { /* tartalék: ffmpeg -i */ }
         }
-        return await ProbeViaFfmpegAsync(file, ct);
+        return await ProbeViaFfmpegAsync(file, ct, inputArgs);
     }
 
     private static ProbeResult ParseProbeJson(string json)
     {
         double dur = 0;
         bool video = false;
+        string vcodec = "";
         var audio = new List<string>();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -78,17 +81,20 @@ public sealed class FfmpegTools
             {
                 var type = s.TryGetProperty("codec_type", out var t) ? t.GetString() : null;
                 var codec = s.TryGetProperty("codec_name", out var c) ? c.GetString() ?? "" : "";
-                if (type == "video") video = true;
+                if (type == "video") { video = true; if (vcodec == "") vcodec = codec; }
                 else if (type == "audio") audio.Add(codec);
                 if (dur <= 0 && s.TryGetProperty("duration", out var sd)) dur = Math.Max(dur, ParseDouble(sd.GetString()));
             }
         }
-        return new ProbeResult(dur, video, audio);
+        return new ProbeResult(dur, video, audio, vcodec);
     }
 
-    private async Task<ProbeResult> ProbeViaFfmpegAsync(string file, CancellationToken ct)
+    private async Task<ProbeResult> ProbeViaFfmpegAsync(string file, CancellationToken ct, IReadOnlyList<string> inputArgs)
     {
-        var r = await ProcessUtil.RunCaptureAsync(FfmpegPath!, new[] { "-hide_banner", "-i", file }, ct);
+        var a = new List<string> { "-hide_banner" };
+        a.AddRange(inputArgs);
+        a.AddRange(new[] { "-i", file });
+        var r = await ProcessUtil.RunCaptureAsync(FfmpegPath!, a, ct);
         var text = r.Stderr;
         double dur = 0;
         var m = Regex.Match(text, @"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)");
@@ -97,7 +103,8 @@ public sealed class FfmpegTools
         bool video = Regex.IsMatch(text, @"Stream #\S+.*: Video:");
         var audio = Regex.Matches(text, @"Stream #\S+.*: Audio:\s*([A-Za-z0-9_]+)")
             .Select(x => x.Groups[1].Value).ToList();
-        return new ProbeResult(dur, video, audio);
+        var vm = Regex.Match(text, @"Stream #\S+.*: Video:\s*([A-Za-z0-9_]+)");
+        return new ProbeResult(dur, video, audio, vm.Success ? vm.Groups[1].Value : "");
     }
 
     private static double ParseDouble(string? s) =>

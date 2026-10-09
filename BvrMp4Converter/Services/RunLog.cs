@@ -12,8 +12,10 @@ public sealed class RunLog
     {
         try
         {
-            Directory.CreateDirectory(directory);
-            _path = System.IO.Path.Combine(directory, $"bvr_convert_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+            // a naplók a kimeneti mappa "log" almappájába kerülnek, nem halmozódnak a konvertált fájlok mellett
+            var logDir = System.IO.Path.Combine(directory, "log");
+            Directory.CreateDirectory(logDir);
+            _path = System.IO.Path.Combine(logDir, $"bvr_convert_{DateTime.Now:yyyyMMdd_HHmmss}.log");
         }
         catch { _path = null; }
     }
