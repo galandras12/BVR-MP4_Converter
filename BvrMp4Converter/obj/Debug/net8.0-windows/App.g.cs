@@ -57,7 +57,7 @@ namespace BvrMp4Converter {
             
             #line default
             #line hidden
-            System.Uri resourceLocater = new System.Uri("/BvrMp4Converter;V1.0.2.0;component/app.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/BvrMp4Converter;V1.0.3.1344;component/app.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\App.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);
